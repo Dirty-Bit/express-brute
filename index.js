@@ -49,7 +49,7 @@ ExpressBrute.prototype.getMiddleware = function (options) {
 				// start with express' found IP
 				// we will overwrite with more specific
 				// information, when available
-				let ip = req.ip;
+				let ip = req.ip || req.connection.remoteAddress;
 
 				// try cloudflare header first
 				// To provide the client (visitor) IP address for every request to the origin, Cloudflare adds the CF-Connecting-IP header.
@@ -68,19 +68,29 @@ ExpressBrute.prototype.getMiddleware = function (options) {
 					// ["client", "proxy1", "proxy2"], where proxy2 is the furthest downstream.
 					ip = req.ips[0];
 				}
-
-				// check for a comma in the ip address from x-forwarded-for
-				if (ip.indexOf(',') !== -1) {
-					ip = ip.substring(0, ip.indexOf(','));
-				  }
-			  
-				if (ip.indexOf('.') !== -1 && ip.indexOf(':') !== -1) {
-					ip = ip.substring(0, ip.indexOf(':'));
-					if (!ip) {
-						ip = ip.substring(0, ip.lastIndexOf(':') + 1);
-					}
+				// check for a x-forwarded-for
+				else if (req.headers.hasOwnProperty('x-forwarded-for')) {
+					ip = req.headers['x-forwarded-for'];
 				}
 
+				// make sure IP exists
+				if (!!ip) {
+					// check for a comma in the ip address from x-forwarded-for
+					if (ip.indexOf(',') !== -1) {
+						ip = ip.substring(0, ip.indexOf(','));
+					}
+				
+					if (ip.indexOf('.') !== -1 && ip.indexOf(':') !== -1) {
+						ip = ip.substring(0, ip.indexOf(':'));
+						if (!ip) {
+							ip = ip.substring(0, ip.lastIndexOf(':') + 1);
+						}
+					}
+				} else {
+					// could not find ip?
+					typeof next == 'function' && next();
+					return;
+				}
 				// build the key based on the client IP
 				key = ExpressBrute._getKey([ip, this.name, key]);
 			} else {
