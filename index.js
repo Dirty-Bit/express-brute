@@ -34,6 +34,7 @@ var ExpressBrute = module.exports = function (store, options) {
 ExpressBrute.prototype.getMiddleware = function (options) {
 	// standardize input
 	options = _.extend({}, options);
+
 	var keyFunc = options.key;
 	if (typeof keyFunc !== 'function') {
 		keyFunc = function (req, res, next) { next(options.key); };
@@ -45,32 +46,44 @@ ExpressBrute.prototype.getMiddleware = function (options) {
 	// create middleware
 	return _.bind(function (req, res, next) {
 		keyFunc(req, res, _.bind(function (key) {
-			if(!options.ignoreIP) {
+
+			// check for development or staging environment
+			// skip the rate limiting
+			if (options.env === 'development' || options.env === 'staging') {
+				typeof next == 'function' && next();
+				return;
+			}
+
+			if (!options.ignoreIP) {
 				// start with express' found IP
 				// we will overwrite with more specific
 				// information, when available
 				let ip = req.ip || req.connection.remoteAddress;
 
-				// try cloudflare header first
-				// To provide the client (visitor) IP address for every request to the origin, Cloudflare adds the CF-Connecting-IP header.
-				if (req.headers.hasOwnProperty('cf-connecting-ip')) {
-					ip = req.headers['cf-connecting-ip'];
-				}
-				// check for req.ips. this will be set if express app is
-				// set to 'trust proxy' and returns true
-				// if coming from cloudflare, this should match the cf-connecting-ip
-				// but with additional cloudflare IPs within the array
-				else if (req.ips && Array.isArray(req.ips) && req.ips.length) {
-					// the left most ip will be the ip for the client
-					// the following IPs will be the proxy hops
-					// 
-					// For example, if X-Forwarded-For is client, proxy1, proxy2, req.ips would be 
-					// ["client", "proxy1", "proxy2"], where proxy2 is the furthest downstream.
-					ip = req.ips[0];
-				}
-				// check for a x-forwarded-for
-				else if (req.headers.hasOwnProperty('x-forwarded-for')) {
-					ip = req.headers['x-forwarded-for'];
+				// make sure there are headers before reading them
+				if (!!req.headers) {
+
+					// try cloudflare header first
+					// To provide the client (visitor) IP address for every request to the origin, Cloudflare adds the CF-Connecting-IP header.
+					if (req.headers.hasOwnProperty('cf-connecting-ip')) {
+						ip = req.headers['cf-connecting-ip'];
+					}
+					// check for req.ips. this will be set if express app is
+					// set to 'trust proxy' and returns true
+					// if coming from cloudflare, this should match the cf-connecting-ip
+					// but with additional cloudflare IPs within the array
+					else if (req.ips && Array.isArray(req.ips) && req.ips.length) {
+						// the left most ip will be the ip for the client
+						// the following IPs will be the proxy hops
+						// 
+						// For example, if X-Forwarded-For is client, proxy1, proxy2, req.ips would be 
+						// ["client", "proxy1", "proxy2"], where proxy2 is the furthest downstream.
+						ip = req.ips[0];
+					}
+					// check for a x-forwarded-for
+					else if (req.headers.hasOwnProperty('x-forwarded-for')) {
+						ip = req.headers['x-forwarded-for'];
+					}
 				}
 
 				// make sure IP exists
@@ -91,6 +104,19 @@ ExpressBrute.prototype.getMiddleware = function (options) {
 					typeof next == 'function' && next();
 					return;
 				}
+
+				// check for whitelist in the options config
+				if (options.whitelist && Array.isArray(options.whitelist)) {
+					// check each whitelisted ip for a match
+					for (var i = 0; i < options.whitelist.length; i++) {
+						if (options.whitelist[i] === ip) {
+							// we have a match, we aren't going to rate limit this IP
+							typeof next == 'function' && next();
+							return;
+						}
+					}
+				}
+
 				// build the key based on the client IP
 				key = ExpressBrute._getKey([ip, this.name, key]);
 			} else {

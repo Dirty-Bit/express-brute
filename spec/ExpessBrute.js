@@ -632,4 +632,120 @@ describe("express brute", function () {
 			errorSpy.should.have.been.calledOnce;
 		});
 	});
+
+	describe("middleware options", function () {
+		var brute, store, errorSpy, nextSpy, req, req2;
+		beforeEach(function () {
+			store = new ExpressBrute.MemoryStore();
+			errorSpy = sinon.stub();
+			nextSpy = sinon.stub();
+			req = function () { return { ip: '1.2.3.4' }; };
+			req2 = function () { return { ip: '5.6.7.8' }; };
+			brute = new ExpressBrute(store, {
+				freeRetries: 0,
+				minWait: 10,
+				maxWait: 100,
+				failCallback: errorSpy
+			});
+		});
+
+		it('respects development environment', function () {
+			brute = new ExpressBrute(store, {
+				freeRetries: 1,
+				minWait: 10,
+				maxWait: 100,
+				failCallback: errorSpy
+			});
+
+			// get middleware with development option
+			let middleware = brute.getMiddleware({
+				env: process.env.NODE_ENV || 'development'
+			});
+
+			// we should allow all requests in the development env
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.called;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledTwice;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledThrice;
+			errorSpy.should.not.have.been.called;
+		});
+
+		it('respects staging environment', function () {
+			brute = new ExpressBrute(store, {
+				freeRetries: 1,
+				minWait: 10,
+				maxWait: 100,
+				failCallback: errorSpy
+			});
+
+			// get middleware with staging option
+			let middleware = brute.getMiddleware({
+				env: process.env.NODE_ENV || 'staging'
+			});
+
+			// we should allow all requests in the staging env
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.called;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledTwice;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledThrice;
+			errorSpy.should.not.have.been.called;
+		});
+
+		it('respects whitelist IP', function () {
+			brute = new ExpressBrute(store, {
+				freeRetries: 1,
+				minWait: 10,
+				maxWait: 100,
+				failCallback: errorSpy
+			});
+
+			// get middleware with development option
+			let middleware = brute.getMiddleware({
+				whitelist: ['1.2.3.4']
+			});
+
+			// allow all requests from whitelisted IP
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.called;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledTwice;
+			errorSpy.should.not.have.been.called;
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.calledThrice;
+			errorSpy.should.not.have.been.called;
+		});
+
+		it('blocks non-whitelist IPs with whitelist provided', function () {
+			brute = new ExpressBrute(store, {
+				freeRetries: 1,
+				minWait: 10,
+				maxWait: 100,
+				failCallback: errorSpy
+			});
+
+			// get middleware with development option
+			let middleware = brute.getMiddleware({
+				whitelist: ['1.2.3.5']
+			});
+
+			// one free try (... maybe 2?)
+			middleware(req(), new ResponseMock(), nextSpy);
+			middleware(req(), new ResponseMock(), nextSpy);
+			nextSpy.should.have.been.called;
+			errorSpy.should.not.have.been.called;
+
+			// start blocking
+			middleware(req(), new ResponseMock(), nextSpy);
+			errorSpy.should.have.been.called;
+		});
+	});
 });

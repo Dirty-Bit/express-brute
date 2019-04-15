@@ -163,6 +163,12 @@ app.post('/auth',
 
 Changelog
 ---------
+### v1.0.4
+* Additional options for development/staging environments and whitelisted IPs to prevent excessive blocking
+
+### v1.0.2 & v1.0.3
+* Handle Cloudflare headers to receive actual client IP when behind a reverse proxy
+
 ### v1.0.1
 * BUG: Fixed an edge case where freeretries weren't being respected if app servers had slightly different times
 
